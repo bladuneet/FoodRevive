@@ -1,0 +1,215 @@
+Tech Stack for MVP
+Backend: Django + DRF
+Frontend: React
+Database: PostgreSQL or SQLite
+Authentication: JWT
+Geolocation & Mapping: Leaflet.js + GeoDjango
+Optional Integration: Mock IoT data (simulated smart bins, sensors)
+
+📁 Folder Structure (GitHub-Ready)
+pgsql
+
+afriwaste-mvp/
+├── backend/
+│   ├── manage.py
+│   ├── requirements.txt
+│   ├── afriwaste/
+│   │   ├── models.py
+│   │   ├── views.py
+│   │   ├── urls.py
+│   │   ├── serializers.py
+│   │   ├── logic.py
+│   │   └── admin.py
+│   └── project/
+│       ├── settings.py
+│       └── urls.py
+├── frontend/
+│   └── react-app/
+│       ├── src/
+│       │   ├── pages/
+│       │   ├── components/
+│       │   ├── services/
+│       │   └── App.js
+│       └── package.json
+└── README.md
+🔧 Backend Code Highlights (Django)
+models.py
+
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+
+class User(AbstractUser):
+    ROLE_CHOICES = (
+        ('farmer', 'Farmer'),
+        ('market', 'Market'),
+        ('restaurant', 'Restaurant'),
+        ('ngo', 'NGO'),
+        ('consumer', 'Consumer'),
+        ('municipality', 'Municipality'),
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    location = models.CharField(max_length=255)
+
+class WasteReport(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    food_type = models.CharField(max_length=100)
+    quantity_kg = models.FloatField()
+    category = models.CharField(max_length=50, choices=(
+        ('surplus', 'Surplus'),
+        ('spoiled', 'Spoiled'),
+        ('organic_waste', 'Organic Waste')
+    ))
+    report_date = models.DateTimeField(auto_now_add=True)
+
+class RedistributionRequest(models.Model):
+    donor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='donor')
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='receiver')
+    food_type = models.CharField(max_length=100)
+    quantity_kg = models.FloatField()
+    status = models.CharField(max_length=20, default='pending')
+
+class CompostMarketListing(models.Model):
+    seller = models.ForeignKey(User, on_delete=models.CASCADE)
+    description = models.TextField()
+    quantity_kg = models.FloatField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    active = models.BooleanField(default=True)
+
+class GamifiedChallenge(models.Model):
+    title = models.CharField(max_length=100)
+    description = models.TextField()
+    points = models.IntegerField()
+
+class ChallengeCompletion(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    challenge = models.ForeignKey(GamifiedChallenge, on_delete=models.CASCADE)
+    completed_on = models.DateField(auto_now_add=True)
+views.py
+python
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .models import WasteReport, RedistributionRequest, CompostMarketListing
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def report_waste(request):
+    data = request.data
+    WasteReport.objects.create(
+        user=request.user,
+        food_type=data['food_type'],
+        quantity_kg=data['quantity_kg'],
+        category=data['category']
+    )
+    return Response({'message': 'Waste reported successfully'})
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def request_redistribution(request):
+    data = request.data
+    RedistributionRequest.objects.create(
+        donor=request.user,
+        receiver_id=data['receiver_id'],
+        food_type=data['food_type'],
+        quantity_kg=data['quantity_kg']
+    )
+    return Response({'message': 'Redistribution request created'})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def compost_market(request):
+    listings = CompostMarketListing.objects.filter(active=True)
+    return Response([{
+        'id': l.id, 'description': l.description,
+        'quantity_kg': l.quantity_kg, 'price': str(l.price)
+    } for l in listings])
+serializers.py
+python
+
+from rest_framework import serializers
+from .models import WasteReport, CompostMarketListing
+
+class WasteReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WasteReport
+        fields = '__all__'
+
+class CompostMarketListingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompostMarketListing
+        fields = '__all__'
+🌍 Frontend (React) Key Page: Report Waste
+/pages/ReportWaste.js
+jsx
+
+import React, { useState } from 'react';
+import axios from 'axios';
+
+function ReportWaste() {
+  const [foodType, setFoodType] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [category, setCategory] = useState('surplus');
+
+  const handleSubmit = () => {
+    axios.post('/api/report-waste/', {
+      food_type: foodType,
+      quantity_kg: parseFloat(quantity),
+      category: category
+    }, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    }).then(res => alert(res.data.message));
+  };
+
+  return (
+    <div>
+      <h2>Report Food Waste</h2>
+      <input placeholder="Food Type" onChange={e => setFoodType(e.target.value)} />
+      <input type="number" placeholder="Quantity (kg)" onChange={e => setQuantity(e.target.value)} />
+      <select onChange={e => setCategory(e.target.value)}>
+        <option value="surplus">Surplus</option>
+        <option value="spoiled">Spoiled</option>
+        <option value="organic_waste">Organic Waste</option>
+      </select>
+      <button onClick={handleSubmit}>Submit</button>
+    </div>
+  );
+}
+
+export default ReportWaste;
+📦 requirements.txt
+
+Django>=4.2
+djangorestframework
+psycopg2
+django-cors-headers
+djangorestframework-simplejwt
+📘 GitHub README.md Sample
+md
+
+# AfriWaste (FoodRevive) MVP
+
+A digital platform to track, reduce, and repurpose food waste across Africa's food value chain.
+
+Features
+- Real-time Food Waste Reporting
+- Surplus Redistribution to NGOs & Schools
+- Organic Waste Marketplace (Compost/Biogas)
+- Gamified Waste Reduction for Consumers
+- IoT Placeholder for Smart Bins
+
+## Setup
+
+1. Backend
+```bash
+cd backend
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+Frontend
+
+bash
+
+cd frontend/react-app
+npm install
+npm start
